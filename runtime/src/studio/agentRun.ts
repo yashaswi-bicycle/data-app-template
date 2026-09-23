@@ -125,6 +125,8 @@ export type FindingRef = {
   readonly row?: Readonly<Record<string, unknown>>
   readonly panelId?: string
   readonly agentId?: string
+  /** The panel's narrowed filters (`{field, op, value}`, ≤ 8), which Studio puts in the run's `context.filters`. */
+  readonly filters?: readonly { readonly field: string; readonly op: string; readonly value: unknown }[]
 }
 
 export type Verdict = 'accept' | 'reject' | 'correct'
@@ -206,6 +208,7 @@ function wire(request: AgentRunRequest): Record<string, unknown> {
     ...(subject === undefined ? {} : { subject }),
     ...(row === undefined ? {} : { row }),
     ...(panelId === undefined ? {} : { panelId }),
+    ...(request.action === 'start' && request.filters !== undefined && request.filters.length > 0 ? { filters: request.filters.slice(0, 8) } : {}),
     ...('question' in request && request.question !== undefined ? { question: request.question } : {}),
     ...('rerun' in request && request.rerun === true ? { rerun: true } : {}),
     ...('runId' in request ? { runId: request.runId } : {}),
@@ -293,6 +296,7 @@ async function direct(request: AgentRunRequest): Promise<AgentRunUpdate> {
             ...(request.row === undefined ? {} : { finding: { row: { ...request.row, ...(request.subject === undefined ? {} : { subject: request.subject }) } } }),
             ...(request.question === undefined ? {} : { question: request.question }),
             ...(request.panelId === undefined ? {} : { panel_id: request.panelId }),
+            ...(request.filters === undefined || request.filters.length === 0 ? {} : { filters: request.filters.slice(0, 8) }),
             ...(request.rerun === true ? { rerun: true } : {}),
           }),
         })

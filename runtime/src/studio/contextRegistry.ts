@@ -69,6 +69,8 @@ export type FindingReport = {
   readonly jobId?: string
   readonly subject?: Readonly<Record<string, unknown>>
   readonly row: Readonly<Record<string, unknown>>
+  /** The panel's narrowed filters, forwarded with a run the host starts (Studio's `context.filters`). */
+  readonly filters?: readonly { readonly field: string; readonly op: string; readonly value: unknown }[]
 }
 
 export const MAX_REPORTED_FINDINGS = 25

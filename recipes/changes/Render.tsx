@@ -5,9 +5,13 @@ import { fmtCompact } from '../../runtime/src/format.js'
 import { type CoreProps, SectionHead, Widget } from '../../runtime/src/parts.js'
 import { analysisById, dimensionLabel, filterControls, type Spec } from '../../runtime/src/spec.js'
 import { type FindingRef, subjectKey, subjectOfRow } from '../../runtime/src/studio/agentRun.js'
-import { type AnalysisJob, type AnalysisResult, type AnalysisWindow, cancelAnalysis, type Driver, type Finding, filtersOf, phaseOf, type RunBody, watchAnalysis, windowOf } from '../../runtime/src/studio/analysis.js'
+import { type AnalysisFilter, type AnalysisJob, type AnalysisResult, type AnalysisWindow, cancelAnalysis, type Driver, type Finding, filtersOf, phaseOf, type RunBody, watchAnalysis, windowOf } from '../../runtime/src/studio/analysis.js'
 import { type FindingReport, MAX_REPORTED_FINDINGS, usePanelId, useSelection } from '../../runtime/src/studio/contextRegistry.js'
+import { renderState } from '../../runtime/src/studio/hostState.js'
 import { BdaError } from '../../runtime/src/studio/types.js'
+
+/** Codes that mean "this environment has no analyses", said as a note rather than an error card. */
+const UNAVAILABLE = new Set(['analysis_unavailable', 'analyses_disabled'])
 
 /** What the frame reports as this panel's selection: the finding, and where its row sits in the card (for the host's "Why?" pill). */
 export type FindingSelection = { readonly findingKey: string; readonly row?: { readonly top: number; readonly height: number } }
@@ -29,7 +33,7 @@ export function trimmedRow(finding: Finding): Record<string, unknown> {
 }
 
 /** One finding, as everything downstream (the host's pill, `CauseCard`, the agent) needs it. */
-export function findingRef(spec: Spec, finding: Finding, jobId: string | undefined, panelId: string | undefined): FindingRef {
+export function findingRef(spec: Spec, finding: Finding, jobId: string | undefined, panelId: string | undefined, filters: readonly AnalysisFilter[] = []): FindingRef {
   const subject = subjectOfRow(finding, spec.model)
   const key = subjectKey(subject)
   return {
@@ -39,6 +43,7 @@ export function findingRef(spec: Spec, finding: Finding, jobId: string | undefin
     subject,
     row: trimmedRow(finding),
     ...(panelId === undefined ? {} : { panelId }),
+    ...(filters.length === 0 ? {} : { filters }),
   }
 }
 
@@ -81,11 +86,16 @@ export function Render({ spec, bind }: CoreProps) {
   const analysis = analysisById(spec, bind.analysis === 'first' ? undefined : bind.analysis)
   const limit = typeof bind.limit === 'number' ? bind.limit : 20
   const manual = bind.run === 'manual'
+  // A capture never runs an analysis: it shows the last completed result the host handed it, or
+  // says the analysis was not run - and is ready at once either way.
+  const host = renderState()
+  const snapshot = host.snapshot === true
+  const provided = snapshot && analysis !== undefined ? (host.analyses?.[analysis.id] as AnalysisResult | undefined) : undefined
   const controls = useControlsIfAny()
   const panelId = usePanelId()
   const [selected, setSelected] = useSelection<FindingSelection>(panelId)
-  const [run, setRun] = useState<Run>({ final: false })
-  const [attempt, setAttempt] = useState(manual ? 0 : 1)
+  const [run, setRun] = useState<Run>(provided === undefined ? { final: false } : { result: provided, final: true })
+  const [attempt, setAttempt] = useState(manual || snapshot ? 0 : 1)
 
   // What the run is asked about: the panel's own window and narrowed filters, when the analysis binds them.
   const time = controls?.time ?? initialTime(spec)
@@ -98,7 +108,7 @@ export function Render({ spec, bind }: CoreProps) {
   const bodyKey = JSON.stringify({ window, filters })
 
   useEffect(() => {
-    if (analysis === undefined || attempt === 0) return
+    if (analysis === undefined || attempt === 0 || snapshot) return
     const body: RunBody = JSON.parse(bodyKey) as RunBody
     setRun((previous) => ({ final: false, ...(previous.result === undefined ? {} : { result: previous.result }) }))
     return watchAnalysis(analysis.id, body, (update) =>
@@ -108,19 +118,27 @@ export function Render({ spec, bind }: CoreProps) {
         return { ...(job === undefined ? {} : { job }), ...(result === undefined ? {} : { result }), ...(update.error === undefined ? {} : { error: update.error }), final: update.final }
       }),
     )
-  }, [analysis, bodyKey, attempt])
+  }, [analysis, bodyKey, attempt, snapshot])
 
-  const phase = attempt === 0 ? undefined : phaseOf(run.job, run.error)
+  const unavailable = run.error !== undefined && UNAVAILABLE.has(run.error.code)
+  const phase = snapshot ? (provided === undefined ? undefined : 'done') : attempt === 0 || unavailable ? undefined : phaseOf(run.job, run.error)
   const result = run.result
   const findings = useMemo(() => (result?.findings ?? []).slice(0, limit), [result, limit])
   const jobId = result?.job_id ?? run.job?.job_id
   const reports = useMemo<FindingReport[]>(
     () =>
       findings.slice(0, MAX_REPORTED_FINDINGS).map((finding) => {
-        const ref = findingRef(spec, finding, jobId, panelId)
-        return { findingKey: ref.findingKey, ...(ref.subjectKey === undefined ? {} : { subjectKey: ref.subjectKey }), ...(jobId === undefined ? {} : { jobId }), ...(ref.subject === undefined ? {} : { subject: ref.subject }), row: ref.row ?? {} }
+        const ref = findingRef(spec, finding, jobId, panelId, filters)
+        return {
+          findingKey: ref.findingKey,
+          ...(ref.subjectKey === undefined ? {} : { subjectKey: ref.subjectKey }),
+          ...(jobId === undefined ? {} : { jobId }),
+          ...(ref.subject === undefined ? {} : { subject: ref.subject }),
+          row: ref.row ?? {},
+          ...(filters.length === 0 ? {} : { filters }),
+        }
       }),
-    [findings, jobId, panelId, spec],
+    [findings, jobId, panelId, spec, filters],
   )
   const selectedFinding = findings.find((finding) => finding.finding_key === selected?.findingKey)
   const drivers = useMemo<Driver[]>(
@@ -161,7 +179,11 @@ export function Render({ spec, bind }: CoreProps) {
   const retryAfter = job?.error?.retry_after_s
   const stateLine =
     phase === undefined
-      ? 'Not run yet'
+      ? snapshot
+        ? 'Analysis not run'
+        : unavailable
+          ? 'Not available'
+          : 'Not run yet'
       : phase === 'queued'
         ? `Queued${typeof job?.position === 'number' ? ` · ${ordinal(job.position)} in line` : ''}`
         : phase === 'running'
@@ -180,7 +202,7 @@ export function Render({ spec, bind }: CoreProps) {
         right={
           <span className="kit-changes__state" data-phase={phase ?? 'idle'}>
             <span className="bda-subtle">{[windowLabel(window), stateLine].filter((part) => part !== '').join(' · ')}</span>
-            {phase === undefined ? (
+            {phase === undefined && !snapshot && !unavailable ? (
               <button type="button" className="bda-pill" onClick={() => setAttempt(1)}>
                 Run
               </button>
@@ -206,7 +228,9 @@ export function Render({ spec, bind }: CoreProps) {
         findings={reports.length === 0 ? undefined : reports}
       >
         {phase === undefined ? (
-          <div className="bda-subtle kit-changes__note">Runs a Detect &amp; Explain analysis over this window, as you.</div>
+          <div className="bda-subtle kit-changes__note">
+            {snapshot ? 'The analysis is not run in a capture; open the app to see what changed.' : unavailable ? 'Analyses are not available here.' : 'Runs a Detect & Explain analysis over this window, as you.'}
+          </div>
         ) : findings.length === 0 ? (
           <div className="bda-subtle kit-changes__note">{phase === 'done' ? (result?.summary?.message ?? 'Nothing moved outside its usual range.') : null}</div>
         ) : (
@@ -273,7 +297,7 @@ export function Render({ spec, bind }: CoreProps) {
                     </tbody>
                   </table>
                 )}
-                <CauseCard finding={findingRef(spec, selectedFinding, jobId, panelId)} />
+                {snapshot ? null : <CauseCard finding={findingRef(spec, selectedFinding, jobId, panelId, filters)} />}
               </div>
             ) : null}
           </>

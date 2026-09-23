@@ -92,6 +92,12 @@ export type RenderState = {
   readonly panel?: string
   /** Presentation-only: hide the interactive chrome the kit owns and stop animating, for a capture. */
   readonly snapshot?: boolean
+  /**
+   * The last completed result of each declared analysis, by analysis id, when the host has one to
+   * hand a capture. A `changes` panel never runs its analysis in snapshot mode: it shows this, or
+   * says the analysis was not run. Shape: the service's `AnalysisResult`.
+   */
+  readonly analyses?: Readonly<Record<string, unknown>>
 }
 
 /**

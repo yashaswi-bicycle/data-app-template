@@ -120,7 +120,23 @@ afterEach(() => {
   cleanup()
   resetRegistryForTests()
   restoreHostFrame()
+  delete window.__BDA_CONTEXT
 })
+
+/** A capture: the host's render state says snapshot, and may hand over last results. */
+function captureMode(analyses?: Record<string, unknown>): void {
+  window.__BDA_CONTEXT = { state: { snapshot: true, ...(analyses === undefined ? {} : { analyses }) } } as never
+}
+
+async function panelReport(postMessage: ReturnType<typeof vi.fn>) {
+  postMessage.mockClear()
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    flushReportForTests()
+  })
+  const [context] = sent(postMessage, 'studio:sandbox:context')
+  return context.panels.find((entry: { panelId: string }) => entry.panelId === 'p3:changes')
+}
 
 const sent = (postMessage: ReturnType<typeof vi.fn>, type: string) => postMessage.mock.calls.map((call) => call[0]).filter((message) => message?.type === type)
 
@@ -271,5 +287,55 @@ describe('changes panel', () => {
     mountChanges(bare)
     expect(screen.getByText('No analysis is declared for this panel.')).toBeTruthy()
     expect(sent(postMessage, 'studio:sandbox:analysis')).toHaveLength(0)
+  })
+
+  it('in a capture, never runs: says the analysis was not run and is ready at once', async () => {
+    captureMode()
+    const postMessage = mockHostFrame()
+    mountChanges()
+    expect(sent(postMessage, 'studio:sandbox:analysis')).toHaveLength(0)
+    expect(screen.getByText(/Analysis not run/)).toBeTruthy()
+    expect(screen.queryByText('Run')).toBeNull()
+    expect(document.querySelector('[aria-busy="true"]')).toBeNull()
+    expect((await panelReport(postMessage)).status).toBe('ready')
+  })
+
+  it('in a capture, shows the last completed result the host provided', async () => {
+    captureMode({ why_revenue: { job_id: 'aj_00000000000000000001', state: 'succeeded', findings: FINDINGS, drivers: DRIVERS } })
+    const postMessage = mockHostFrame()
+    mountChanges()
+    expect(sent(postMessage, 'studio:sandbox:analysis')).toHaveLength(0)
+    expect(screen.getByText('Region: North')).toBeTruthy()
+    expect((await panelReport(postMessage)).status).toBe('ready')
+    // Picking a row in a capture asks no agent.
+    postMessage.mockClear()
+    fireEvent.click(screen.getByText('Region: North'))
+    expect(sent(postMessage, 'studio:sandbox:agent-run')).toHaveLength(0)
+  })
+
+  it('an environment without analyses is a muted note, not an error card', () => {
+    const postMessage = mockHostFrame()
+    mountChanges()
+    const [run] = sent(postMessage, 'studio:sandbox:analysis')
+    push({ type: 'studio:sandbox:analysis-result', requestId: run.requestId, ok: false, error: { code: 'analysis_unavailable', message: 'Off for this tenant.', status: 503 } })
+    expect(screen.getByText('Analyses are not available here.')).toBeTruthy()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it("reports the panel's filters with each finding and sends them when a run starts", async () => {
+    const postMessage = mockHostFrame()
+    mountChanges()
+    const [run] = sent(postMessage, 'studio:sandbox:analysis')
+    push({ type: 'studio:sandbox:analysis-result', requestId: run.requestId, ok: true, job: job('succeeded'), result: { job_id: 'aj_00000000000000000001', state: 'succeeded', findings: FINDINGS, drivers: DRIVERS }, final: true })
+    const panel = await panelReport(postMessage)
+    expect(panel.findings[0].filters).toEqual([{ field: 'region', op: 'in', value: ['North', 'South'] }])
+    fireEvent.click(screen.getByText('Region: North'))
+    const [get] = sent(postMessage, 'studio:sandbox:agent-run')
+    push({ type: 'studio:sandbox:agent-run-result', requestId: get.requestId, ok: true, findingKey: 'f0000000000000000001', subjectKey: null, runId: null, state: 'none', match: null, asOf: null })
+    await act(async () => {})
+    expect(get).not.toHaveProperty('filters')
+    fireEvent.click(screen.getByText('Why did this change?'))
+    const start = sent(postMessage, 'studio:sandbox:agent-run').find((message) => message.action === 'start')
+    expect(start.filters).toEqual([{ field: 'region', op: 'in', value: ['North', 'South'] }])
   })
 })

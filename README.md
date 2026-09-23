@@ -112,7 +112,7 @@ capability is a `postMessage` to the parent. This is the whole wire.
 | host -> frame | `studio:sandbox:highlight` | `panelId` | `runtime/src/studio/contextRegistry.ts` |
 | frame -> host | `studio:sandbox:analysis` | `requestId`, `action` (`run` with `analysisId`, `window?`, `baselineWindow?`, `filters?`; `unwatch`; `cancel` with `jobId`) | `runtime/src/studio/analysis.ts` |
 | host -> frame | `studio:sandbox:analysis-result` | `requestId`, `ok`, `job?` (JobStatus), `result?` (findings + drivers), `error?`, `final` — repeated on every job move | `runtime/src/studio/analysis.ts` |
-| frame -> host | `studio:sandbox:agent-run` | `requestId`, `action` (`start` / `get` / `cancel` / `feedback`), `agentId`, `findingKey`, `subjectKey?`, `jobId?`, `subject?`, `row?`, `panelId?`, `rerun?`, `runId?`, `verdict?`, `causeIds?`, `note?` | `runtime/src/studio/agentRun.ts` |
+| frame -> host | `studio:sandbox:agent-run` | `requestId`, `action` (`start` / `get` / `cancel` / `feedback`), `agentId`, `findingKey`, `subjectKey?`, `jobId?`, `subject?`, `row?`, `panelId?`, `filters?` (start only), `rerun?`, `runId?`, `verdict?`, `causeIds?`, `note?` | `runtime/src/studio/agentRun.ts` |
 | host -> frame | `studio:sandbox:agent-run-result` | `requestId?` (absent on a push), `ok`, `findingKey`, `subjectKey`, `runId`, `state`, `match`, `asOf`, `run?`, `error?` | `runtime/src/studio/agentRun.ts` |
 | frame -> host | **`studio:sandbox:state`** | `state` (`asOf?`, `time?`, `filters`, `section?` — only what differs from the defaults), `dropped[]` (`{ id, reason }`) | `runtime/src/studio/contextRegistry.ts` |
 
@@ -141,6 +141,12 @@ reload with `get` (by finding, then by `subject_key`). `CauseCard` renders the
 agent's text as text nodes only; `[fig:n]` becomes a chip with the run's
 checked figure and `[n]` opens that cause's evidence. ✓ / ✗ / correct go back
 as `feedback`.
+
+In a capture (`state.snapshot`) a `changes` panel never runs its analysis and
+reports `ready` at once: it shows the last completed result the host put in
+`state.analyses[<analysis id>]`, or says the analysis was not run. The panel's
+narrowed filters ride on each reported finding (`findings[].filters`) and on a
+`start` (`filters`), for the run's `context.filters`.
 
 Note `studio:sandbox:state` uses `kind:` where the others use `type:` — it is a
 state announcement, not one half of a request/response pair.
