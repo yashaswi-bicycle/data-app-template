@@ -6,7 +6,8 @@
  * calls the API as the viewer, and the host owns the waiting.
  *
  *   -> { type: 'studio:sandbox:agent-run', requestId, action: 'start' | 'get' | 'cancel' | 'feedback', agentId?,
- *        findingKey?, subjectKey?, jobId?, subject?, row?, question?, panelId?, rerun?, runId?, verdict?, causeIds?, note? }
+ *        findingKey?, subjectKey?, jobId?, subject?, row?, question?, panelId?, filters?, input?, rerun?, runId?, verdict?,
+ *        causeIds?, note? }
  *   <- { type: 'studio:sandbox:agent-run-result', requestId?, ok, findingKey, subjectKey, runId, state, match, asOf, run?, error? }
  *
  * The result is the answer to a request AND is pushed again, without a
@@ -127,6 +128,12 @@ export type FindingRef = {
   readonly agentId?: string
   /** The panel's narrowed filters (`{field, op, value}`, ≤ 8), which Studio puts in the run's `context.filters`. */
   readonly filters?: readonly { readonly field: string; readonly op: string; readonly value: unknown }[]
+  /**
+   * `start` only: the agent's own input, for an agent whose input is not a finding (`ticket_coverage`:
+   * a source query and a match rule). Sent verbatim (contract §1.1 form (a)); `findingKey` then only names
+   * the card that asked, which replies and pushes carry back. Needs a host that forwards it (ui !47).
+   */
+  readonly input?: Readonly<Record<string, unknown>>
 }
 
 export type Verdict = 'accept' | 'reject' | 'correct'
@@ -209,6 +216,7 @@ function wire(request: AgentRunRequest): Record<string, unknown> {
     ...(row === undefined ? {} : { row }),
     ...(panelId === undefined ? {} : { panelId }),
     ...(request.action === 'start' && request.filters !== undefined && request.filters.length > 0 ? { filters: request.filters.slice(0, 8) } : {}),
+    ...(request.action === 'start' && request.input !== undefined ? { input: request.input } : {}),
     ...('question' in request && request.question !== undefined ? { question: request.question } : {}),
     ...('rerun' in request && request.rerun === true ? { rerun: true } : {}),
     ...('runId' in request ? { runId: request.runId } : {}),
@@ -289,7 +297,13 @@ async function direct(request: AgentRunRequest): Promise<AgentRunUpdate> {
         response = await fetch(base, {
           method: 'POST',
           headers,
-          body: JSON.stringify({
+          body: JSON.stringify(request.input !== undefined ? {
+            agent_id: request.agentId ?? 'cause',
+            input: request.input,
+            ...(request.question === undefined ? {} : { question: request.question }),
+            ...(request.panelId === undefined ? {} : { panel_id: request.panelId }),
+            ...(request.rerun === true ? { rerun: true } : {}),
+          } : {
             agent_id: request.agentId ?? 'cause',
             finding_key: request.findingKey,
             ...(request.jobId === undefined ? {} : { job_id: request.jobId }),

@@ -242,6 +242,25 @@ describe('changes panel', () => {
     expect(panel.selection.row).toMatchObject({ top: expect.any(Number), height: expect.any(Number) })
   })
 
+  it('says what a contribution is a share of: the direction next to the %, the basis label as its tooltip and once under the table', () => {
+    const postMessage = mockHostFrame()
+    mountChanges()
+    const [run] = sent(postMessage, 'studio:sandbox:analysis')
+    const label = 'Share of the total change (-17,588) vs the 8-week weekly median baseline; negative = moved against the total.'
+    const basis = { baseline: 'seasonal', of: 'total_change', total_change: -17588, direction: 'against_total', label }
+    const findings = [{ ...FINDINGS[0], global_contribution_pct: -54.04, contribution_basis: basis }, { ...FINDINGS[1], global_contribution_pct: null, contribution_basis: { ...basis, direction: null } }]
+    const drivers = [{ ...DRIVERS[0], global_contribution_pct: 21.6, contribution_basis: { ...basis, direction: 'with_total' } }]
+    push({ type: 'studio:sandbox:analysis-result', requestId: run.requestId, ok: true, job: job('succeeded'), result: { job_id: 'aj_00000000000000000001', state: 'succeeded', findings, drivers, summary: { status: 'ok', contribution_basis: { ...basis, label: 'Share of the total change vs the 8-week weekly median baseline; negative = moved against the total.' } } }, final: true })
+    const cell = screen.getByText('−54% · against total')
+    expect(cell.getAttribute('title')).toBe(label)
+    // No contribution: a dash, never "0%".
+    expect(document.querySelectorAll('tr[data-finding-key]')[1]?.textContent).toContain('—')
+    // The run-level basis, said once.
+    expect(screen.getByText('Share of the total change vs the 8-week weekly median baseline; negative = moved against the total.')).toBeTruthy()
+    fireEvent.click(screen.getByText('Region: North'))
+    expect(screen.getByText('+22% · with total')).toBeTruthy()
+  })
+
   it('a failed run shows what failed and Retry runs it again', () => {
     const postMessage = mockHostFrame()
     mountChanges()

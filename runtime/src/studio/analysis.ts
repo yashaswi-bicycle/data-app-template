@@ -74,12 +74,28 @@ export type Finding = {
   readonly delta: number | null
   readonly pct_change: number | null
   readonly global_contribution_pct?: number | null
+  readonly contribution_basis?: ContributionBasis | null
   readonly severity: 'critical' | 'high' | 'medium' | 'low' | null
   readonly drivers_count?: number | null
   readonly window_start: string | null
   readonly window_end: string | null
   readonly baseline_start?: string | null
   readonly baseline_end?: string | null
+}
+
+/**
+ * What a contribution % is a share of (the service's `contribution_basis`, on every finding and driver).
+ * `global_contribution_pct` is the row's delta over the *total* KPI change against the same baseline, so a
+ * segment that rose while the total fell reads negative: it moved against the total. `label` is the
+ * service's one-line reading of it, for a tooltip.
+ */
+export type ContributionBasis = {
+  readonly baseline?: 'seasonal' | 'window' | null
+  readonly seasonality?: { readonly type?: string | null; readonly num_seasons?: number | null; readonly aggregation?: string | null } | null
+  readonly of?: string | null
+  readonly total_change?: number | null
+  readonly direction?: 'with_total' | 'against_total' | null
+  readonly label?: string | null
 }
 
 /** One `bicycle.drivers/v1` row, under its finding. */
@@ -94,6 +110,7 @@ export type Driver = {
   readonly pct_change: number | null
   readonly parent_contribution_pct: number | null
   readonly global_contribution_pct?: number | null
+  readonly contribution_basis?: ContributionBasis | null
   readonly rank: number | null
 }
 
@@ -108,7 +125,7 @@ export type AnalysisResult = {
   readonly truncated?: { readonly findings?: boolean; readonly drivers?: boolean }
   readonly notices?: readonly { readonly code: string; readonly message: string }[]
   readonly warnings?: readonly { readonly code: string; readonly message: string }[]
-  readonly summary?: { readonly status?: string; readonly message?: string | null } | null
+  readonly summary?: { readonly status?: string; readonly message?: string | null; readonly contribution_basis?: ContributionBasis | null } | null
 }
 
 /** What the viewer is told, in five words. `cancelled` and the service's `analysis_abandoned` both read as `abandoned`. */

@@ -112,7 +112,7 @@ capability is a `postMessage` to the parent. This is the whole wire.
 | host -> frame | `studio:sandbox:highlight` | `panelId` | `runtime/src/studio/contextRegistry.ts` |
 | frame -> host | `studio:sandbox:analysis` | `requestId`, `action` (`run` with `analysisId`, `window?`, `baselineWindow?`, `filters?`; `unwatch`; `cancel` with `jobId`) | `runtime/src/studio/analysis.ts` |
 | host -> frame | `studio:sandbox:analysis-result` | `requestId`, `ok`, `job?` (JobStatus), `result?` (findings + drivers), `error?`, `final` — repeated on every job move | `runtime/src/studio/analysis.ts` |
-| frame -> host | `studio:sandbox:agent-run` | `requestId`, `action` (`start` / `get` / `cancel` / `feedback`), `agentId`, `findingKey`, `subjectKey?`, `jobId?`, `subject?`, `row?`, `panelId?`, `filters?` (start only), `rerun?`, `runId?`, `verdict?`, `causeIds?`, `note?` | `runtime/src/studio/agentRun.ts` |
+| frame -> host | `studio:sandbox:agent-run` | `requestId`, `action` (`start` / `get` / `cancel` / `feedback`), `agentId`, `findingKey`, `subjectKey?`, `jobId?`, `subject?`, `row?`, `panelId?`, `filters?` (start only), `input?` (start only: the agent's own input, for an agent whose input is not a finding), `rerun?`, `runId?`, `verdict?`, `causeIds?`, `note?` | `runtime/src/studio/agentRun.ts` |
 | host -> frame | `studio:sandbox:agent-run-result` | `requestId?` (absent on a push), `ok`, `findingKey`, `subjectKey`, `runId`, `state`, `match`, `asOf`, `run?`, `error?` | `runtime/src/studio/agentRun.ts` |
 | frame -> host | **`studio:sandbox:state`** | `state` (`asOf?`, `time?`, `filters`, `section?` — only what differs from the defaults), `dropped[]` (`{ id, reason }`) | `runtime/src/studio/contextRegistry.ts` |
 

@@ -23,7 +23,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CauseCard } from '../runtime/src/chrome/CauseCard.js'
-import { type FindingRef, sha256Hex, subjectKey, subjectOfRow, windowSpec } from '../runtime/src/studio/agentRun.js'
+import { type FindingRef, requestAgentRun, sha256Hex, subjectKey, subjectOfRow, windowSpec } from '../runtime/src/studio/agentRun.js'
 
 const FINDING: FindingRef = {
   findingKey: 'f0000000000000000001',
@@ -215,5 +215,17 @@ describe('subject_key', () => {
       window: { from: '2026-09-14', through: '2026-09-20' },
       baseline: { from: '2026-09-07', through: '2026-09-13' },
     })
+  })
+})
+
+describe('agent runs with the agent\'s own input', () => {
+  it('start carries input verbatim for an agent whose input is not a finding (form (a)); get never does', async () => {
+    const postMessage = mockHostFrame()
+    const input = { source: { model: 'm_retail_demo', sql: 'SELECT module, order_id FROM m_retail_demo WHERE ts >= :from', params: { from: '2026-09-14' } }, match: { text: 'summary' }, provider: 'mock:atlassian' }
+    void requestAgentRun({ action: 'start', agentId: 'ticket_coverage', findingKey: 'tc_2026-09-14_2026-09-15', panelId: 'ticket_coverage', input })
+    void requestAgentRun({ action: 'get', agentId: 'ticket_coverage', findingKey: 'tc_2026-09-14_2026-09-15', input })
+    const [start, get] = requests(postMessage)
+    expect(start).toMatchObject({ action: 'start', agentId: 'ticket_coverage', findingKey: 'tc_2026-09-14_2026-09-15', panelId: 'ticket_coverage', input })
+    expect(get).not.toHaveProperty('input')
   })
 })

@@ -5,7 +5,7 @@ import { fmtCompact } from '../../runtime/src/format.js'
 import { type CoreProps, SectionHead, Widget } from '../../runtime/src/parts.js'
 import { analysisById, dimensionLabel, filterControls, type Spec } from '../../runtime/src/spec.js'
 import { type FindingRef, subjectKey, subjectOfRow } from '../../runtime/src/studio/agentRun.js'
-import { type AnalysisFilter, type AnalysisJob, type AnalysisResult, type AnalysisWindow, cancelAnalysis, type Driver, type Finding, filtersOf, phaseOf, type RunBody, watchAnalysis, windowOf } from '../../runtime/src/studio/analysis.js'
+import { type AnalysisFilter, type AnalysisJob, type AnalysisResult, type AnalysisWindow, cancelAnalysis, type ContributionBasis, type Driver, type Finding, filtersOf, phaseOf, type RunBody, watchAnalysis, windowOf } from '../../runtime/src/studio/analysis.js'
 import { type FindingReport, MAX_REPORTED_FINDINGS, usePanelId, useSelection } from '../../runtime/src/studio/contextRegistry.js'
 import { renderState } from '../../runtime/src/studio/hostState.js'
 import { BdaError } from '../../runtime/src/studio/types.js'
@@ -54,6 +54,20 @@ function segmentLabel(spec: Spec, dimensions: Readonly<Record<string, unknown>>)
 
 const num = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) ? fmtCompact(value) : '—')
 const pct = (value: number | null | undefined) => (typeof value === 'number' && Number.isFinite(value) ? `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(1)}%` : '—')
+
+const DIRECTION: Record<string, string> = { with_total: 'with total', against_total: 'against total' }
+
+/**
+ * A contribution % with what it is a share of: "−54% · against total". A bare "−54%" next to a +3,876% change
+ * reads as a contradiction; the service's basis says the share is of the *total* KPI change against the same
+ * baseline, so a segment that rose while the total fell is negative. The basis label is the cell's tooltip.
+ */
+export function shareOfTotal(value: number | null | undefined, basis: ContributionBasis | null | undefined): { readonly text: string; readonly title?: string } {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return { text: '—' }
+  const direction = basis?.direction ? DIRECTION[basis.direction] : undefined
+  const text = `${value > 0 ? '+' : value < 0 ? '−' : ''}${Math.abs(value).toFixed(0)}%${direction === undefined ? '' : ` · ${direction}`}`
+  return typeof basis?.label === 'string' && basis.label !== '' ? { text, title: basis.label } : { text }
+}
 
 function ordinal(n: number): string {
   const tail = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ({ 1: 'st', 2: 'nd', 3: 'rd' } as Record<number, string>)[n % 10] ?? 'th'
@@ -152,6 +166,10 @@ export function Render({ spec, bind }: CoreProps) {
     [result, selectedFinding],
   )
 
+  // What every "Share of total" on screen is a share of, said once under the table (the run-level basis).
+  const basisNote = findings.some((finding) => typeof finding.global_contribution_pct === 'number')
+    ? (result?.summary?.contribution_basis?.label ?? findings.find((finding) => finding.contribution_basis?.label)?.contribution_basis?.label ?? undefined)
+    : undefined
   const title = analysis?.title ?? 'What changed and why'
   const pick = (finding: Finding, event: MouseEvent<HTMLTableRowElement>) => {
     if (selected?.findingKey === finding.finding_key) {
@@ -248,6 +266,7 @@ export function Render({ spec, bind }: CoreProps) {
                     <th className="bda-numeric">Now</th>
                     <th className="bda-numeric">Before</th>
                     <th className="bda-numeric">Change</th>
+                    <th className="bda-numeric">Share of total</th>
                     <th>Severity</th>
                   </tr>
                 </thead>
@@ -260,6 +279,7 @@ export function Render({ spec, bind }: CoreProps) {
                         <td className="bda-numeric kit-mono">{num(finding.current_value)}</td>
                         <td className="bda-numeric kit-mono">{num(finding.baseline_value)}</td>
                         <td className="bda-numeric kit-mono">{pct(finding.pct_change)}</td>
+                        <ShareCell value={finding.global_contribution_pct} basis={finding.contribution_basis} />
                         <td>{finding.severity === null ? '—' : <span className={`kit-changes__sev kit-changes__sev--${finding.severity}`}>{finding.severity}</span>}</td>
                       </tr>
                     )
@@ -267,6 +287,7 @@ export function Render({ spec, bind }: CoreProps) {
                 </tbody>
               </table>
             </div>
+            {basisNote === undefined ? null : <div className="bda-subtle kit-changes__note">{basisNote}</div>}
             {result?.truncated?.findings === true || (result?.findings.length ?? 0) > findings.length ? <div className="bda-subtle kit-changes__note">{`Showing the first ${findings.length} findings.`}</div> : null}
             {selectedFinding !== undefined ? (
               <div className="kit-changes__detail">
@@ -282,6 +303,7 @@ export function Render({ spec, bind }: CoreProps) {
                         <th className="bda-numeric">Before</th>
                         <th className="bda-numeric">Change</th>
                         <th className="bda-numeric">Share of move</th>
+                        <th className="bda-numeric">Share of total</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -292,6 +314,7 @@ export function Render({ spec, bind }: CoreProps) {
                           <td className="bda-numeric kit-mono">{num(driver.baseline_value)}</td>
                           <td className="bda-numeric kit-mono">{pct(driver.pct_change)}</td>
                           <td className="bda-numeric kit-mono">{typeof driver.parent_contribution_pct === 'number' ? `${driver.parent_contribution_pct.toFixed(0)}%` : '—'}</td>
+                          <ShareCell value={driver.global_contribution_pct} basis={driver.contribution_basis} />
                         </tr>
                       ))}
                     </tbody>
@@ -304,5 +327,14 @@ export function Render({ spec, bind }: CoreProps) {
         )}
       </Widget>
     </section>
+  )
+}
+
+function ShareCell({ value, basis }: { readonly value: number | null | undefined; readonly basis: ContributionBasis | null | undefined }) {
+  const share = shareOfTotal(value, basis)
+  return (
+    <td className="bda-numeric kit-mono" {...(share.title === undefined ? {} : { title: share.title })}>
+      {share.text}
+    </td>
   )
 }
