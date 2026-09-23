@@ -116,6 +116,24 @@ export type StoreSpec = {
   readonly blobs?: readonly { readonly name: string; readonly purpose: string; readonly kind?: 'json' | 'csv' | 'binary'; readonly max_bytes?: number }[]
 }
 
+/**
+ * One ad hoc Detect & Explain question the app may ask as its viewer
+ * (bicycle-studio-api, `analyses[]` in `bda.manifest.json`). The kit only
+ * carries it: `config` is the service's own closed-world `cfgDetect` /
+ * `cfgExplain` object and is validated there on upload, never here.
+ */
+export type AnalysisSpec = {
+  readonly id: string
+  readonly kind: 'detect' | 'explain'
+  readonly title?: string
+  readonly config: Readonly<Record<string, unknown>>
+  /** `window`: the panel's date range replaces `config.window` on run; `filters`: the panel's filters are appended. Both default true. */
+  readonly bind?: { readonly window?: boolean; readonly filters?: boolean }
+  readonly calendar?: { readonly timezone?: string; readonly week_start?: string; readonly grain?: 'day' | 'hour' }
+  /** `shared`: every viewer of the app shares one answer per question. Default `user`. */
+  readonly scope?: 'user' | 'shared'
+}
+
 export type Spec = {
   readonly version: 2
   readonly appId?: string
@@ -145,6 +163,8 @@ export type Spec = {
    * host-owned".
    */
   readonly chat?: { readonly enabled: boolean; readonly anchors?: readonly ('panel' | 'selection' | 'none')[] }
+  /** Declared analyses (see `AnalysisSpec`); a `changes` panel runs one of them through the host. */
+  readonly analyses?: readonly AnalysisSpec[]
 }
 
 /** One parameter a declared query takes — see `compose/datasets.mjs`'s `render()`. */
@@ -203,6 +223,12 @@ export function loadQueries(): readonly QuerySpec[] {
 /** Display name for a measure id or derived metric id, from the interview's words or the spec's label. */
 export function word(spec: Spec, id: string): string {
   return spec.words?.[id] ?? spec.measures.find((measure) => measure.id === id)?.label ?? id
+}
+
+/** A declared analysis by id, or the first one when `id` is not given. */
+export function analysisById(spec: Spec, id: unknown): AnalysisSpec | undefined {
+  const analyses = spec.analyses ?? []
+  return typeof id === 'string' ? analyses.find((analysis) => analysis.id === id) : analyses[0]
 }
 
 export function measureById(spec: Spec, id: string): MeasureSpec | undefined {

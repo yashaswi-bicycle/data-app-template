@@ -38,6 +38,20 @@ export function deriveManifest(spec) {
   if (spec.telemetry !== undefined) {
     manifest.telemetry = { enabled: spec.telemetry.enabled, values: spec.telemetry.values ?? false }
   }
+
+  // Analyses travel verbatim: the service owns their config's grammar (closed world, checked on upload)
+  // and runs them as the viewer. The kit only says which exist.
+  if ((spec.analyses ?? []).length > 0) {
+    manifest.analyses = spec.analyses.map((analysis) => ({
+      id: analysis.id,
+      kind: analysis.kind,
+      ...(analysis.title === undefined ? {} : { title: analysis.title }),
+      config: analysis.config,
+      ...(analysis.bind === undefined ? {} : { bind: analysis.bind }),
+      ...(analysis.calendar === undefined ? {} : { calendar: analysis.calendar }),
+      ...(analysis.scope === undefined ? {} : { scope: analysis.scope }),
+    }))
+  }
   return manifest
 }
 
@@ -52,6 +66,9 @@ export function checkManifest(manifest) {
   const blobNames = (manifest.blobs ?? []).map((blob) => blob.name)
   if (new Set(blobNames).size !== blobNames.length) errors.push('blob names must be unique')
   if (blobNames.length > 16) errors.push(`${blobNames.length} blobs; the limit is 16`)
+  const analysisIds = (manifest.analyses ?? []).map((analysis) => analysis.id)
+  if (new Set(analysisIds).size !== analysisIds.length) errors.push('analysis ids must be unique')
+  if (analysisIds.length > 16) errors.push(`${analysisIds.length} analyses; the limit is 16`)
   const ids = new Set()
   for (const query of manifest.queries) {
     if (ids.has(query.id)) errors.push(`duplicate query id "${query.id}"`)

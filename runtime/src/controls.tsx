@@ -452,6 +452,11 @@ export function ControlsProvider({ spec, children }: { spec: Spec; children: Rea
   return <ControlsContext.Provider value={value}>{children}</ControlsContext.Provider>
 }
 
+/** `useControls()` that reads `undefined` outside a provider instead of throwing — for a card that can work from the spec's own window (a recipe rendered on its own, in a fixture). */
+export function useControlsIfAny(): (ControlsState & ControlsActions) | undefined {
+  return useContext(ControlsContext)
+}
+
 export function useControls(): ControlsState & ControlsActions {
   const value = useContext(ControlsContext)
   if (value === undefined) throw new Error('useControls outside ControlsProvider')

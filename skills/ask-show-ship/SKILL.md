@@ -82,6 +82,7 @@ Measures are the spec's measure ids (from the model card), or, with the `ab_test
 | Which **[cut]** values are best and worst on **[measure]**? | `ranking` |
 | What happens where **[cut]** meets **[cut]**? | `heatmap` |
 | Give me the numbers by **[cuts]**. | `table` |
+| What moved **[measure]**, what drove it, and why? | `changes` (needs a declared analysis — see below) |
 
 ### `ab_test` family recipes (experiments with arms and participants)
 
@@ -99,6 +100,10 @@ Measures are the spec's measure ids (from the model card), or, with the `ab_test
 | Which few segments matter most? | `extremes` |
 | How long, how split, how many? | `overview` |
 
+
+## What changed and why (`analyses`)
+
+When the decision is "what moved and why" — a weekly review, a health check — offer a **What changed and why** panel: "Do you want a panel that finds what moved outside its usual range last week, shows what drove it, and lets you ask why?" A yes declares one analysis under `analyses` (`id`, `kind: "explain"`, `config: { request: { kpi_name, mode: "DETECT_AND_EXPLAIN", dimensions (≤ 4 of the cuts), seasonality_config, analysis_predicates, detect_config }, window: { relative: "last_week" }, baseline_window: { shift: "P7D" } }`) and adds `{ "say": <their answer>, "recipe": "changes", "bind": { "analysis": <id> } }`. `kpi_name` is the metric's exact catalog name. Say plainly that it runs as the viewer, in the tenant's daily analysis budget, can take a few minutes the first time, and that "Why?" asks an agent whose every number is checked against the queries it ran.
 
 ## Persistence an app may declare
 

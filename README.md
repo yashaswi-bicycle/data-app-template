@@ -110,7 +110,37 @@ capability is a `postMessage` to the parent. This is the whole wire.
 | host -> frame | `studio:sandbox:store-result` | `requestId`, `ok`, `result` \| `error` | `runtime/src/studio/store.ts` |
 | frame -> host | `studio:sandbox:context` | `panels[]` (`panelId`, `recipe`, `say`, `bind`, `selection?`, `digest?`, `kind?`, `threadId?`, **`status`**, `rect`), `tokens` | `runtime/src/studio/contextRegistry.ts` |
 | host -> frame | `studio:sandbox:highlight` | `panelId` | `runtime/src/studio/contextRegistry.ts` |
+| frame -> host | `studio:sandbox:analysis` | `requestId`, `action` (`run` with `analysisId`, `window?`, `baselineWindow?`, `filters?`; `unwatch`; `cancel` with `jobId`) | `runtime/src/studio/analysis.ts` |
+| host -> frame | `studio:sandbox:analysis-result` | `requestId`, `ok`, `job?` (JobStatus), `result?` (findings + drivers), `error?`, `final` — repeated on every job move | `runtime/src/studio/analysis.ts` |
+| frame -> host | `studio:sandbox:agent-run` | `requestId`, `action` (`start` / `get` / `cancel` / `feedback`), `agentId`, `findingKey`, `subjectKey?`, `jobId?`, `subject?`, `row?`, `panelId?`, `rerun?`, `runId?`, `verdict?`, `causeIds?`, `note?` | `runtime/src/studio/agentRun.ts` |
+| host -> frame | `studio:sandbox:agent-run-result` | `requestId?` (absent on a push), `ok`, `findingKey`, `subjectKey`, `runId`, `state`, `match`, `asOf`, `run?`, `error?` | `runtime/src/studio/agentRun.ts` |
 | frame -> host | **`studio:sandbox:state`** | `state` (`asOf?`, `time?`, `filters`, `section?` — only what differs from the defaults), `dropped[]` (`{ id, reason }`) | `runtime/src/studio/contextRegistry.ts` |
+
+`studio:sandbox:context` panels may also carry **`findings[]`** (`findingKey`,
+`subjectKey`, `jobId`, `subject`, `row`) — the findings a `changes` panel is
+showing — and a `changes` panel's `selection` is `{ findingKey, row: { top,
+height } }`, the picked finding and where its row sits in the card, so the
+host's "Why?" pill can sit on that row.
+
+### Analyses and agent runs
+
+A spec may declare **`analyses[]`** — ad hoc Detect & Explain questions
+(`id`, `kind` `detect`|`explain`, `title?`, `config`, `bind?`, `calendar?`,
+`scope?`). They travel verbatim into the manifest's `analyses`; the service
+owns `config`'s grammar and checks it on upload. The `changes` recipe
+("What changed and why", `bind.analysis`) runs one through the host as the
+viewer and shows the job's state (queued with its place in line, running,
+done, failed, abandoned), then the findings keyed by `finding_key`, the
+picked finding's drivers, and a `CauseCard`.
+
+The host owns every wait: an analysis is answered on every job move until
+`final`; an agent run is answered and then pushed again on every state change
+while the host polls, including a run the host's own "Why?" pill started.
+`useAgentRun(finding)` listens by `findingKey` and finds its run again on
+reload with `get` (by finding, then by `subject_key`). `CauseCard` renders the
+agent's text as text nodes only; `[fig:n]` becomes a chip with the run's
+checked figure and `[n]` opens that cause's evidence. ✓ / ✗ / correct go back
+as `feedback`.
 
 Note `studio:sandbox:state` uses `kind:` where the others use `type:` — it is a
 state announcement, not one half of a request/response pair.

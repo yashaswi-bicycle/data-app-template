@@ -44,6 +44,8 @@ const CORE_SPEC: Spec = {
   ],
   questions: [],
   controls: [{ kind: 'dimensions' }, { kind: 'measure' }, { kind: 'heatmap_axes' }, { kind: 'depth' }],
+  // `changes` runs a declared analysis; its first answer is pending exactly like a query.
+  analyses: [{ id: 'why_revenue', kind: 'detect', config: { request: { kpi_name: 'revenue', dimensions: ['region'] }, window: { relative: 'last_week' } } }],
 }
 
 /** Synthetic family — no real customer or experiment ids. */

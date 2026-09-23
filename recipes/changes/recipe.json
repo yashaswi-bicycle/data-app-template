@@ -1,0 +1,31 @@
+{
+  "id": "changes",
+  "family": "core",
+  "name": "What changed and why",
+  "answers": "What moved outside its usual range, what drove it, and why?",
+  "shape": "the [analysis] findings for the panel's window, each with its drivers and, on request, an agent's checked explanation",
+  "needs": [],
+  "slots": 0,
+  "fits": [
+    "biz",
+    "pm",
+    "analyst"
+  ],
+  "bind": {
+    "analysis": {
+      "type": "analysis",
+      "default": "first"
+    },
+    "limit": {
+      "type": "int",
+      "default": 20
+    },
+    "run": {
+      "type": "enum",
+      "options": ["auto", "manual"],
+      "default": "auto"
+    }
+  },
+  "caveat": "Needs an analysis declared in `analyses`. Runs as the viewer, in the tenant's analysis queue and daily budget; a repeat of the same question within six hours is served from the service's cache. The explanation is an agent's and is labelled as such.",
+  "explain": "A Detect & Explain analysis over the panel's window and filters, run as you. Each finding is a segment whose value moved outside its usual band; its drivers are the sub-segments that account for the move. \"Why?\" asks the cause agent, whose every figure is recomputed from the queries it ran."
+}

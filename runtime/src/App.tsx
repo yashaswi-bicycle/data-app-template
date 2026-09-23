@@ -19,6 +19,7 @@ import { Render as AbOverview } from '../../families/ab_test/recipes/overview/Re
 import { Render as AbVerdict } from '../../families/ab_test/recipes/verdict/Render.js'
 import { Render as AbVolumeVsLift } from '../../families/ab_test/recipes/volume_vs_lift/Render.js'
 import { Render as Breakdown } from '../../recipes/breakdown/Render.js'
+import { Render as Changes } from '../../recipes/changes/Render.js'
 import { Render as Heatmap } from '../../recipes/heatmap/Render.js'
 import { Render as Kpis } from '../../recipes/kpis/Render.js'
 import { Render as Narrative } from '../../recipes/narrative/Render.js'
@@ -48,6 +49,7 @@ export const CORE: Record<string, ComponentType<CoreProps>> = {
   table: Table,
   narrative: Narrative,
   summary: Summary,
+  changes: Changes,
 }
 
 /** Exported for evals/loading.test.tsx. */

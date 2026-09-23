@@ -7,7 +7,7 @@ import { SkeletonChart, SkeletonMetric, SkeletonTable, SkeletonText } from './co
 import type { CoreData, Dataset, QueryState } from './data.js'
 import { fmtSigned } from './format.js'
 import type { MetricOrCvr, Spec } from './spec.js'
-import { usePanelMeta, useRegisterPanelInstance } from './studio/contextRegistry.js'
+import { type FindingReport, usePanelMeta, useRegisterPanelInstance } from './studio/contextRegistry.js'
 import type { BdaError, PanelStatus } from './studio/types.js'
 
 export const METRIC_COLOR: Record<MetricOrCvr, string> = {
@@ -192,6 +192,8 @@ export type WidgetProps = {
    * `ready`, which is the safer default (a host waits for nothing).
    */
   readonly empty?: boolean
+  /** The findings this card shows, for the host's "Why?" pill (`PanelReport.findings`). Only `changes` passes these. */
+  readonly findings?: readonly FindingReport[] | undefined
   readonly children: ReactNode
 }
 
@@ -220,11 +222,11 @@ export function widgetStatus({ pending, error = null, empty = false }: Pick<Widg
  * screen) — its `panelId` comes from `PanelMetaProvider` (App.tsx wraps every
  * resolved panel in one), so a recipe never has to know it exists.
  */
-export function Widget({ heading, pending, fetching = false, error = null, onRetry, skeleton, className = 'bda-card', style, digest, spec, provenance, kind, threadId, empty, children }: WidgetProps) {
+export function Widget({ heading, pending, fetching = false, error = null, onRetry, skeleton, className = 'bda-card', style, digest, spec, provenance, kind, threadId, empty, findings, children }: WidgetProps) {
   const refreshing = fetching && !pending
   const meta = usePanelMeta()
   const status = widgetStatus({ pending, error, ...(empty === undefined ? {} : { empty }) })
-  const { nodeRef, highlighted } = useRegisterPanelInstance(meta, digest, status, { ...(kind === undefined ? {} : { kind }), ...(threadId === undefined ? {} : { threadId }) })
+  const { nodeRef, highlighted } = useRegisterPanelInstance(meta, digest, status, { ...(kind === undefined ? {} : { kind }), ...(threadId === undefined ? {} : { threadId }), ...(findings === undefined ? {} : { findings }) })
   const classes = [className, refreshing ? 'kit-card--refreshing' : '', highlighted ? 'kit-card--highlight' : ''].filter((part) => part.length > 0).join(' ')
   const showProvenance = spec !== undefined && provenance !== undefined
   // The affordance is `position: absolute`, so this wrapper needs `position:

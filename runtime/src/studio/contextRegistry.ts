@@ -50,7 +50,28 @@ export type PanelReport = {
    */
   readonly status: PanelStatus
   readonly rect: PanelRect
+  /**
+   * The findings this panel shows, when it shows any (a `changes` panel) —
+   * what the host's "Why?" pill offers to explain. The row the viewer picked
+   * is named by `selection.findingKey`. At most `MAX_REPORTED_FINDINGS`.
+   */
+  readonly findings?: readonly FindingReport[]
 }
+
+/**
+ * One finding as the host needs it to start an agent run about it: the keys,
+ * the subject it is about, the DE job it came from and the row (trimmed to the
+ * values the run snapshots and the service's stale check reads).
+ */
+export type FindingReport = {
+  readonly findingKey: string
+  readonly subjectKey?: string
+  readonly jobId?: string
+  readonly subject?: Readonly<Record<string, unknown>>
+  readonly row: Readonly<Record<string, unknown>>
+}
+
+export const MAX_REPORTED_FINDINGS = 25
 
 export type ContextMessage = {
   readonly type: 'studio:sandbox:context'
@@ -141,6 +162,7 @@ type Instance = {
   readonly node: Element
   readonly kind?: string
   readonly threadId?: string
+  readonly findings?: readonly FindingReport[]
 }
 
 type PanelState = {
@@ -207,6 +229,20 @@ function mergeDigests(instances: readonly Instance[]): unknown {
   return defined.flatMap((digest) => (Array.isArray(digest) ? digest : [digest]))
 }
 
+/** Every card's findings, first card first, deduped by key and capped. Absent when no card reports any. */
+function mergedFindings(instances: readonly Instance[]): { findings?: readonly FindingReport[] } {
+  const seen = new Set<string>()
+  const out: FindingReport[] = []
+  for (const instance of instances) {
+    for (const finding of instance.findings ?? []) {
+      if (seen.has(finding.findingKey) || out.length >= MAX_REPORTED_FINDINGS) continue
+      seen.add(finding.findingKey)
+      out.push(finding)
+    }
+  }
+  return out.length === 0 ? {} : { findings: out }
+}
+
 function buildReport(): readonly PanelReport[] {
   const out: PanelReport[] = []
   for (const [panelId, state] of panels) {
@@ -225,6 +261,7 @@ function buildReport(): readonly PanelReport[] {
       ...(last.threadId === undefined ? {} : { threadId: last.threadId }),
       status: mergeStatus(instances),
       rect: unionRect(instances),
+      ...mergedFindings(instances),
     })
   }
   return out
@@ -441,13 +478,14 @@ export function useRegisterPanelInstance(
   /** This card's own readiness, derived by `Widget` from its query props. Re-registering on a change is what makes a status move re-report, not only a digest move (T9.0, contract 1). */
   status: PanelStatus,
   /** Overrides `meta.kind`/`meta.threadId` — how `Widget`'s own `kind`/`threadId` props (dynamic, learned after the recipe's own data lands) reach the registry, since `PanelMeta` itself is static per render. */
-  extra?: { readonly kind?: string | undefined; readonly threadId?: string | undefined },
+  extra?: { readonly kind?: string | undefined; readonly threadId?: string | undefined; readonly findings?: readonly FindingReport[] | undefined },
 ): { readonly nodeRef: RefObject<HTMLDivElement | null>; readonly highlighted: boolean } {
   const nodeRef = useRef<HTMLDivElement>(null)
   const instanceId = useId()
   const [highlighted, setHighlighted] = useState(false)
   const kind = extra?.kind ?? meta?.kind
   const threadId = extra?.threadId ?? meta?.threadId
+  const findings = extra?.findings
 
   useEffect(() => {
     if (meta === undefined) return
@@ -462,6 +500,7 @@ export function useRegisterPanelInstance(
       node,
       ...(kind === undefined ? {} : { kind }),
       ...(threadId === undefined ? {} : { threadId }),
+      ...(findings === undefined ? {} : { findings }),
     })
     const observer = new ResizeObserver(() => notifyGeometryChange())
     observer.observe(node)
@@ -469,7 +508,7 @@ export function useRegisterPanelInstance(
       observer.disconnect()
       unregisterInstance(meta.panelId, instanceId)
     }
-  }, [meta, instanceId, digest, status, kind, threadId])
+  }, [meta, instanceId, digest, status, kind, threadId, findings])
 
   // A pulse the host asked for: scroll the card into view and hold
   // `kit-card--highlight` for 1.6s (the CSS-only pulse is in theme.css).

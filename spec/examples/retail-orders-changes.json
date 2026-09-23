@@ -1,0 +1,166 @@
+{
+  "version": 2,
+  "appId": "app_1234567890abcdef1235",
+  "model": "m_retail_demo",
+  "title": "Retail Orders \u2014 What Changed",
+  "decision": "What moved revenue last week, what drove it, and why?",
+  "persona": "pm",
+  "template": "report",
+  "time": {
+    "column": "event_time",
+    "from": "2026-08-01",
+    "to": "tomorrow",
+    "grain": "day"
+  },
+  "measures": [
+    {
+      "id": "orders",
+      "column": "orders_total",
+      "label": "Orders",
+      "format": "number",
+      "good": "up",
+      "role": "primary"
+    },
+    {
+      "id": "revenue",
+      "column": "revenue_total",
+      "label": "Revenue",
+      "format": "currency",
+      "good": "up"
+    },
+    {
+      "id": "refund_rate",
+      "column": "refund_rate_pct",
+      "label": "Refund rate",
+      "format": "rate",
+      "good": "down"
+    },
+    {
+      "id": "aov",
+      "column": "avg_order_value",
+      "label": "Average order value",
+      "format": "currency",
+      "good": "up"
+    }
+  ],
+  "dimensions": [
+    {
+      "field": "region",
+      "label": "Region"
+    },
+    {
+      "field": "channel",
+      "label": "Channel"
+    },
+    {
+      "field": "category",
+      "label": "Category"
+    }
+  ],
+  "questions": [
+    {
+      "say": "How many orders come in, and which way is it moving?",
+      "recipe": "kpis"
+    },
+    {
+      "say": "What moved revenue last week, and why?",
+      "recipe": "changes",
+      "bind": {
+        "analysis": "revenue_wow"
+      }
+    },
+    {
+      "say": "How has revenue moved since August?",
+      "recipe": "trend",
+      "bind": {
+        "measures": [
+          "revenue"
+        ]
+      }
+    }
+  ],
+  "controls": [
+    {
+      "kind": "time",
+      "presets": [
+        "7d",
+        "30d"
+      ],
+      "default": "7d"
+    },
+    {
+      "kind": "filter",
+      "dim": "channel",
+      "multi": true,
+      "options": [
+        "web",
+        "store",
+        "app"
+      ]
+    }
+  ],
+  "words": {
+    "orders": "Orders",
+    "revenue": "Revenue",
+    "refund_rate": "Refund rate",
+    "aov": "Average order value"
+  },
+  "rules": {
+    "compare_periods": 7
+  },
+  "theme": {
+    "accent": "purple",
+    "follow": "system"
+  },
+  "analyses": [
+    {
+      "id": "revenue_wow",
+      "kind": "explain",
+      "title": "What moved revenue",
+      "config": {
+        "request": {
+          "kpi_name": "revenue_total",
+          "mode": "DETECT_AND_EXPLAIN",
+          "dimensions": [
+            "region",
+            "channel",
+            "category"
+          ],
+          "seasonality_config": {
+            "seasonality_type": "WEEKLY",
+            "num_seasons": 8,
+            "aggregation_strategy": "MEDIAN",
+            "bounds": {
+              "strategy": "MAD",
+              "k": 3
+            }
+          },
+          "analysis_predicates": [
+            {
+              "aspect": "DELTA_BAND_PCT",
+              "comparator": ">",
+              "threshold": 10,
+              "use_abs": true
+            }
+          ],
+          "detect_config": {
+            "max_combination_size": 2,
+            "direction": "both",
+            "top_n_only": 50
+          }
+        },
+        "window": {
+          "relative": "last_week"
+        },
+        "baseline_window": {
+          "shift": "P7D"
+        }
+      },
+      "calendar": {
+        "timezone": "UTC",
+        "week_start": "monday",
+        "grain": "day"
+      }
+    }
+  ]
+}

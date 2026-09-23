@@ -260,6 +260,37 @@
         "values": { "type": "boolean", "default": false }
       }
     },
+    "analyses": {
+      "type": "array",
+      "maxItems": 16,
+      "description": "Ad hoc Detect & Explain questions the app may ask as its viewer, carried verbatim into the manifest's `analyses`. A `changes` panel runs one through the host (`studio:sandbox:analysis`). `config` is the service's closed-world cfgDetect / cfgExplain object and is validated by the service on upload; the kit checks only its outline.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "config"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+          "kind": { "enum": ["detect", "explain"] },
+          "title": { "type": "string", "maxLength": 120 },
+          "config": {
+            "type": "object",
+            "required": ["request", "window"],
+            "properties": { "request": { "type": "object", "required": ["kpi_name", "dimensions"] }, "window": { "type": "object" }, "baseline_window": { "type": "object" }, "filters": { "type": "array", "maxItems": 8 } }
+          },
+          "bind": { "type": "object", "additionalProperties": false, "properties": { "window": { "type": "boolean", "default": true }, "filters": { "type": "boolean", "default": true } } },
+          "calendar": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "timezone": { "type": "string", "maxLength": 64 },
+              "week_start": { "enum": ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"] },
+              "grain": { "enum": ["day", "hour"] }
+            }
+          },
+          "scope": { "enum": ["user", "shared"], "default": "user" }
+        }
+      }
+    },
     "chat": {
       "type": "object",
       "description": "Whether the host page offers its chat for this app. The runtime never renders a chat UI itself (invariant 9) — it only reports panel context and selection for the host's own chat to use; this just turns that reporting on. Anchors describe what the host may let the chat point at or read.",

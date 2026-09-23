@@ -86,12 +86,22 @@ export function validateSpec(spec) {
     .filter((dataset) => dataset.repeat !== undefined)
     .map((dataset) => ({ ...dataset.repeat, seen: new Set() }))
 
+  const analysisIds = (spec.analyses ?? []).map((analysis) => analysis.id)
+  if (new Set(analysisIds).size !== analysisIds.length) errors.push('/analyses ids must be unique')
+  spec.analyses?.forEach((analysis, index) => {
+    // The service refuses a baseline on a DETECT config; saying so here keeps the failure local.
+    if (analysis.kind === 'detect' && analysis.config.baseline_window !== undefined) errors.push(`/analyses/${index}/config/baseline_window only applies to kind "explain"`)
+  })
+
   spec.questions.forEach((question, index) => {
     const recipe = recipes[question.recipe]
     if (recipe === undefined) {
       errors.push(`/questions/${index} recipe "${question.recipe}" is not available for ${spec.family?.kind ?? 'core'} (have: ${Object.keys(recipes).join(', ')})`)
       return
     }
+    // A recipe with an `analysis` binding runs a declared analysis, so the spec must declare one.
+    const analysisSlot = Object.entries(recipe.bind ?? {}).find(([, slot]) => slot.type === 'analysis')
+    if (analysisSlot !== undefined && analysisIds.length === 0) errors.push(`/questions/${index} recipe "${question.recipe}" runs an analysis, but the spec declares none in /analyses`)
     for (const [key, value] of Object.entries(question.bind ?? {})) {
       const slot = recipe.bind?.[key]
       if (slot === undefined) {
@@ -102,6 +112,7 @@ export function validateSpec(spec) {
       if (slot.type === 'measures' && value !== 'ui' && value !== 'all' && value !== 'primary' && (!Array.isArray(value) || value.some((measure) => !okSeries(measure)))) {
         errors.push(`/questions/${index}/bind/${key} must be "all", "primary" or an array of declared measures`)
       }
+      if (slot.type === 'analysis' && value !== 'first' && !analysisIds.includes(value)) errors.push(`/questions/${index}/bind/${key} "${value}" is not a declared analysis id`)
       if (slot.type === 'dim' && value !== 'ui' && value !== null && !dims.has(value)) errors.push(`/questions/${index}/bind/${key} "${value}" is not a declared dimension`)
       if (slot.type === 'dims' && value !== 'ui' && value !== 'all' && value !== 'first' && (!Array.isArray(value) || value.some((dimension) => !dims.has(dimension)))) {
         errors.push(`/questions/${index}/bind/${key} contains an undeclared dimension`)
