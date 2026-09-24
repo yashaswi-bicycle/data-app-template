@@ -291,6 +291,35 @@
         }
       }
     },
+    "agents": {
+      "type": "array",
+      "maxItems": 8,
+      "description": "What this app lets each agent it starts (a card's `start`, the host's Why? pill) do, carried verbatim into the manifest's `agents`. `connectors` grants read access to a tenant connector for that agent only: a known connector, its read-only tools, `access: \"read\"` — the service refuses a write tool on upload, and every call runs as the viewer on the viewer's own connection. `input` fixes top-level fields of the agent's input (each replaces, whole, what the frame sends). No entry for an agent: it gets no connector tools.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z][a-z0-9_-]{0,63}$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "connectors": {
+            "type": "array",
+            "maxItems": 8,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["slug", "tools"],
+              "properties": {
+                "slug": { "enum": ["atlassian"] },
+                "tools": { "type": "array", "minItems": 1, "maxItems": 16, "uniqueItems": true, "items": { "type": "string", "pattern": "^(search|get|list|read|find)[A-Za-z0-9_-]{0,75}$" } },
+                "access": { "const": "read", "default": "read" }
+              }
+            }
+          },
+          "input": { "type": "object", "not": { "required": ["app"] } }
+        }
+      }
+    },
     "chat": {
       "type": "object",
       "description": "Whether the host page offers its chat for this app. The runtime never renders a chat UI itself (invariant 9) — it only reports panel context and selection for the host's own chat to use; this just turns that reporting on. Anchors describe what the host may let the chat point at or read.",

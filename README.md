@@ -148,6 +148,32 @@ reports `ready` at once: it shows the last completed result the host put in
 narrowed filters ride on each reported finding (`findings[].filters`) and on a
 `start` (`filters`), for the run's `context.filters`.
 
+#### Connector permissions (`agents[]`)
+
+An agent the app starts reaches a tenant connector (Jira, ...) only when the
+spec grants it, per agent — the app author grants the permission:
+
+```json
+"agents": [{
+  "id": "ticket_coverage",
+  "title": "Jira coverage of failed orders",
+  "connectors": [{ "slug": "atlassian", "tools": ["searchJiraIssuesUsingJql"], "access": "read" }],
+  "input": { "match": { "text": "text" }, "project": "API" }
+}]
+```
+
+- `connectors`: a known connector (`atlassian`), only its read-only tools,
+  `access: "read"`. A write tool (`createJiraIssue`, `addCommentToJiraIssue`,
+  ...) fails `compose` here and the upload in the service; writing to Jira is a
+  workflow action with an approval, never an agent's.
+- `input`: top-level fields of the agent's input the author fixes — each
+  replaces, whole, what a card's `start` sends (here: how orders are matched to
+  tickets, and the Jira project).
+- The grant goes to the agent it names and no other; the agent's own definition
+  must allow the tool too, and every call runs as the viewer on the viewer's own
+  connection. A tenant with no connection for a granted connector gets
+  `connector_not_connected` (409) instead of a run that checks nothing.
+
 Note `studio:sandbox:state` uses `kind:` where the others use `type:` — it is a
 state announcement, not one half of a request/response pair.
 

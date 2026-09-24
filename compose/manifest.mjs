@@ -52,8 +52,23 @@ export function deriveManifest(spec) {
       ...(analysis.scope === undefined ? {} : { scope: analysis.scope }),
     }))
   }
+  // Agent grants travel verbatim too: the service checks them closed-world on upload (a known connector, its
+  // read-only tools) and forwards a grant only to the agent it names. No entry: no connector for that agent.
+  if ((spec.agents ?? []).length > 0) {
+    manifest.agents = spec.agents.map((agent) => ({
+      id: agent.id,
+      ...(agent.title === undefined ? {} : { title: agent.title }),
+      ...(agent.connectors === undefined ? {} : {
+        connectors: agent.connectors.map((c) => ({ slug: c.slug, tools: [...c.tools], access: c.access ?? 'read' })),
+      }),
+      ...(agent.input === undefined ? {} : { input: agent.input }),
+    }))
+  }
   return manifest
 }
+
+/** Tool names that write; refused locally with the reason the service gives on upload. */
+const WRITE_TOOL = /^(create|edit|update|add|transition|delete|remove|assign|comment)/i
 
 /**
  * The service's own contract, checked here so a failure is local and readable.
@@ -69,6 +84,22 @@ export function checkManifest(manifest) {
   const analysisIds = (manifest.analyses ?? []).map((analysis) => analysis.id)
   if (new Set(analysisIds).size !== analysisIds.length) errors.push('analysis ids must be unique')
   if (analysisIds.length > 16) errors.push(`${analysisIds.length} analyses; the limit is 16`)
+  const agentIds = (manifest.agents ?? []).map((agent) => agent.id)
+  if (new Set(agentIds).size !== agentIds.length) errors.push('agent ids must be unique')
+  if (agentIds.length > 8) errors.push(`${agentIds.length} agents; the limit is 8`)
+  for (const agent of manifest.agents ?? []) {
+    const slugs = (agent.connectors ?? []).map((c) => c.slug)
+    if (new Set(slugs).size !== slugs.length) errors.push(`agent "${agent.id}" grants a connector twice`)
+    for (const grant of agent.connectors ?? []) {
+      if (grant.access !== 'read') errors.push(`agent "${agent.id}": ${grant.slug} access must be "read"`)
+      for (const tool of grant.tools) {
+        if (WRITE_TOOL.test(tool) || !/^(search|get|list|read|find)/i.test(tool)) {
+          errors.push(`agent "${agent.id}": "${tool}" writes to ${grant.slug}; an agent is only ever granted read-only tools`)
+        }
+      }
+    }
+    if (agent.input && Object.hasOwn(agent.input, 'app')) errors.push(`agent "${agent.id}": input.app is set by Studio`)
+  }
   const ids = new Set()
   for (const query of manifest.queries) {
     if (ids.has(query.id)) errors.push(`duplicate query id "${query.id}"`)
