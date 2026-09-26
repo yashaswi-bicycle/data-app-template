@@ -16,9 +16,12 @@ import { defineConfig } from 'vite'
 export default defineConfig({
   plugins: [react()],
   server: {
-    // `npm run dev` talks to the local service, so the studio client's
-    // relative /api calls reach it without CORS.
-    proxy: { '/api': 'http://localhost:8099' },
+    // `npm run dev` proxies the studio client's relative /api calls, so they
+    // reach the service without CORS: the local service by default, or preview
+    // with `BDA_API_ORIGIN=https://preview.bicycle.ai npm run dev` (.env.example).
+    proxy: {
+      '/api': { target: process.env['BDA_API_ORIGIN'] ?? 'http://localhost:8099', changeOrigin: true },
+    },
   },
   build: {
     target: 'es2022',

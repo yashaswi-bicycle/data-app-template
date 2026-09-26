@@ -1,12 +1,14 @@
 # Data app kit
 
-The way Bicycle data apps are created. Two paths exist: **compose from a spec** (default—no code required) or **hand-build from `template/`** (when a recipe cannot express what you need).
+The way Bicycle data apps are created.
+
+**Coding agents:** building an app for someone? Connect the Bicycle Studio MCP and call `studio_guide`, or read [`docs/agents/INDEX.md`](docs/agents/INDEX.md); `CLAUDE.md` has the protocol. Changing this kit? Read [`AGENTS.md`](AGENTS.md).
 
 ## Two ways to build a data app
 
 **Compose from a spec (recommended).** Load `skills/ask-show-ship/SKILL.md`, interview a user to produce a `DataAppSpec`, validate and compose it with `kit compose` or the `design_*` tools on the bicycle-studio MCP. The runtime reads the spec; no per-app code.
 
-**Hand-build from `template/`** (escape hatch). Engineers who need something the recipes cannot express start here. Rules and patterns are in `template/README-FOR-AGENTS.md`.
+**Hand-build from `template/`** (escape hatch). For something the recipes cannot express, and for apps that call functions, agents or workflows (`bda.fn`; composed apps cannot call them yet). Rules and patterns are in `template/README-FOR-AGENTS.md`.
 
 ## Repository layout
 
@@ -25,8 +27,10 @@ compose/cli.mjs   kit commands: validate, compose, brief, manifest, extract, dif
 compose/diff.mjs  typed spec diff (`kit diff`) — see README's `## Diff`
 evals/            golden manifests + transcript fixtures
 skills/           ask-show-ship SKILL.md (published by MCP as prompt + resource)
-template/         hand-build starter (React boilerplate; see template/README-FOR-AGENTS.md)
+template/         hand-build starter (React boilerplate + bda.fn; see template/README-FOR-AGENTS.md)
+docs/agents/      context for coding agents: Studio MCP, data apps, functions, agents, workflows (generated)
 scripts/          no-real-ids.sh (guards against real customer data)
+CHANGELOG.md      what changed in each kit release; RELEASING.md says how to cut one
 ```
 
 ## kit CLI commands
@@ -234,14 +238,14 @@ npm run dev        # vite watch (runtime only, for development)
 
 ## How bicycle-studio-api vendors this kit
 
-The API reads this repository's release tag (e.g. `v1.0.0`) and:
+The API reads this repository's release tag (`kit-vX.Y.Z`, e.g. `kit-v1.1.0`; see `RELEASING.md`) and:
 
 1. Copies `runtime/dist/` (app.js, app.css) into its bundles
 2. Flattens `recipes/` and `families/*/` into JSON catalogues
 3. Embeds `spec/dataapp-spec.v2.schema.json`, templates, and `skills/ask-show-ship/SKILL.md`
 4. Uses `compose/datasets.mjs` (the dataset renderer) to substitute query parameters
 
-**Release rule:** Tag the kit repo → re-vendor into the API from that tag → publish the MCP skill from the same tag. They are one release unit.
+**Release rule:** Tag the kit repo → re-vendor into the API from that tag → publish the MCP skill from the same tag. They are one release unit. The steps are in `RELEASING.md`.
 
 ## Invariants and rules
 

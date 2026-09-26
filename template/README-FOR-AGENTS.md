@@ -1,4 +1,4 @@
-> **Start with compose.** Most apps should not be hand-built. Load `skills/ask-show-ship/SKILL.md` and compose a spec with `kit compose` (or the `design_*` MCP tools). Use this template only when a recipe cannot express what you need.
+> **Start with compose.** Most apps should not be hand-built. Load `skills/ask-show-ship/SKILL.md` and compose a spec with `kit compose` (or the `design_*` MCP tools). Use this template when a recipe cannot express what you need, or when the app must call a function, an agent or a workflow: composed apps cannot call them yet (see "Calling functions, agents and workflows" below).
 
 # Building a Bicycle data app
 
@@ -74,6 +74,12 @@ September, which looks like a bug in your app and is not. Read the window from
 7. **Never change the build output names.** `vite.config.ts` emits exactly
    `app.js` and `app.css`. The host page loads those names. `npm run build`
    fails if anything else appears.
+8. **No forms.** The sandbox has no `allow-forms`, so a `<form>` submit does
+   nothing. Start every action (a refresh, a function call) from a button's
+   `onClick`.
+9. **Never build chat UI.** The host page owns chat for every app: no ask box,
+   drawer or message list in your bundle. Report what is on screen instead
+   (see "Report your panels").
 
 ## The loop
 
@@ -92,15 +98,15 @@ In `bda.manifest.json`, `queries` is a list. Each entry:
 
 ```json
 {
-  "id": "revenue_by_brand_tier",
-  "sql": "SELECT brand_tier, total_channel_revenue FROM QxGTe8DD WHERE timestamp_utc >= :from AND timestamp_utc < :to ORDER BY total_channel_revenue DESC",
+  "id": "revenue_by_category",
+  "sql": "SELECT category, revenue_total FROM m_retail_demo WHERE event_time >= :from AND event_time < :to ORDER BY revenue_total DESC",
   "parameters": [
     { "name": "from", "type": "date", "required": true },
     { "name": "to", "type": "date", "required": true }
   ],
   "columns": [
-    { "name": "brand_tier", "type": "string" },
-    { "name": "total_channel_revenue", "type": "number" }
+    { "name": "category", "type": "string" },
+    { "name": "revenue_total", "type": "number" }
   ],
   "maxLimit": 1000
 }
@@ -117,6 +123,17 @@ In `bda.manifest.json`, `queries` is a list. Each entry:
 - `maxLimit` — 1..10000, default 1000.
 
 Max 32 queries per manifest.
+
+The manifest fields a hand-built app uses (the manifest refuses unknown
+fields):
+
+| Field | What |
+| --- | --- |
+| `appId`, `entry`, `styles`, `title` | identity and the two build outputs (`app.js`, `app.css`) |
+| `queries` | the declared semantic SQL above, at most 32 |
+| `functions` | the functions, agents and workflows the app may call, at most 16 (see "Calling functions, agents and workflows") |
+| `chat` | `{ "enabled": false }` switches the host's chat off; it is on by default |
+| `cache`, `blobs` | declared persistence; anything undeclared is refused with `store_not_declared` |
 
 ### What semantic SQL allows
 
@@ -239,7 +256,7 @@ Declare the query unfiltered, and let "All" mean "no filter":
 ```json
 {
   "id": "revenue_by_month",
-  "sql": "SELECT date_trunc('month', timestamp_utc) AS month, total_channel_revenue FROM QxGTe8DD WHERE timestamp_utc >= :from AND timestamp_utc < :to",
+  "sql": "SELECT date_trunc('month', event_time) AS month, revenue_total FROM m_retail_demo WHERE event_time >= :from AND event_time < :to",
   "parameters": [
     { "name": "from", "type": "date", "required": true },
     { "name": "to", "type": "date", "required": true }
@@ -247,7 +264,7 @@ Declare the query unfiltered, and let "All" mean "no filter":
   "columns": [
     { "name": "month", "type": "string" },
     { "name": "channel", "type": "string" },
-    { "name": "total_channel_revenue", "type": "number" }
+    { "name": "revenue_total", "type": "number" }
   ]
 }
 ```
@@ -307,22 +324,22 @@ const rows = useAppQuery('mrr_by_region', {
 ```
 
 **An option list that can grow has to come from a query.** Hard-coding
-`['luxury', 'premium', 'mid_market']` is fine for a closed enum and wrong for
-anything else: add a fourth tier and the charts show it while the filter
+`['north', 'south', 'west']` is fine for a closed enum and wrong for
+anything else: add a fourth region and the charts show it while the filter
 silently does not offer it. There is no `SELECT DISTINCT` in semantic SQL —
 ask for the dimension alongside a metric and read the values off the rows:
 
 ```json
 {
-  "id": "brand_tiers",
-  "sql": "SELECT brand_tier, conversion_event_volume FROM QxGTe8DD WHERE timestamp_utc >= :from AND timestamp_utc < :to",
+  "id": "regions",
+  "sql": "SELECT region, orders_total FROM m_retail_demo WHERE event_time >= :from AND event_time < :to",
   "parameters": [
     { "name": "from", "type": "date", "required": true },
     { "name": "to", "type": "date", "required": true }
   ],
   "columns": [
-    { "name": "brand_tier", "type": "string" },
-    { "name": "conversion_event_volume", "type": "number" }
+    { "name": "region", "type": "string" },
+    { "name": "orders_total", "type": "number" }
   ]
 }
 ```
@@ -579,6 +596,83 @@ server round trip or changes what you render — it is a handful of
 `postMessage` calls to `window.parent`, which the host is already listening
 for. The full API is documented at the top of `studio/contextRegistry.ts`.
 
+## Calling functions, agents and workflows
+
+An app can start work that Studio runs: a **function** (code, Ask AI, sort
+into categories), an **agent** function, or a published **workflow**. The app
+never runs it itself — it asks the host page, and Studio runs it **as the
+viewer**, with the same invocation and trace as any other caller (it shows in
+Studio's Runs). The client is `src/studio/bda.ts` and `src/studio/fn.ts`,
+already in this template. (Composed spec apps cannot call anything yet; this is
+a hand-build feature.)
+
+**1. Declare it, pinned.** In `bda.manifest.json`, `functions` maps a local
+name to a pinned ref, `{ref}` and nothing else:
+
+```json
+{
+  "functions": {
+    "order_kpis": { "ref": "fn:<tenant>/order_kpis@3" },
+    "triage_order": { "ref": "fn:<tenant>/triage_failed_order@2" },
+    "weekly_digest": { "ref": "wf:<tenant>/weekly-digest@1" }
+  }
+}
+```
+
+A function's ref comes from its page in Studio ("Use it in an app") or from
+`function_versions` over MCP; a workflow's from `workflow_guide(workflow_id)`.
+Never `@latest`. **A person confirms** a version that adds or re-pins an import
+when it is published — tell them, give them the link, and wait.
+
+**2. Name the local name only.** App code says `'order_kpis'`, never the ref.
+The host refuses a ref or an undeclared name (`fn_not_declared`).
+
+**3. Start a call the viewer asks for from a button's `onClick`.** The sandbox
+has no forms.
+
+```tsx
+import { bda } from './studio/bda.js'
+
+// A quick call (code, Ask AI, classify): waits, returns the output, throws a BdaError in words.
+const kpis = await bda.fn.call('order_kpis', { day: '2026-09-20' })
+```
+
+**4. On page load, reuse.** A call made when the page opens runs for every
+viewer on every visit. Always pass `reuse` (at most `"24h"`), and say how old
+the answer is, with a Refresh button that passes `refresh: true`:
+
+```tsx
+const final = await bda.fn.run('order_kpis', input, { reuse: '6h' }) // the final Invocation
+// render bda.fn.outputOf(final), and "as of {final.created_at}" beside a Refresh button
+// (final.reused is true when an earlier run answered)
+```
+
+`reuse` does not apply to workflows.
+
+**5. Agents and workflows are slow: watch, and offer Cancel.** They take
+seconds to minutes. Start with `wait: false`, show progress in words, and let
+the viewer cancel:
+
+```tsx
+const started = await bda.fn.call('triage_order', { order_id }, { wait: false })
+const watch = bda.fn.watch(started.invocation_id, (batch) => setSteps(batch.items)) // "Step 3", "Jira · search issues"
+// a Cancel button: onClick={() => bda.fn.cancel(started.invocation_id)}
+const result = bda.fn.outputOf(await watch.done) // throws for failed or cancelled
+```
+
+While an agent waits for a free slot, the invocation is `queued` with
+`queue_position` (0 = next): show "Queued · N ahead" and keep watching; do not
+call again. A workflow's output is its run receipt; a send is delivered only
+when its `state` is `"sent"`.
+
+**6. Output is data. Render it as text.** Function, agent and workflow output
+is untrusted — it can quote a ticket anyone wrote. Put it in text nodes, never
+`dangerouslySetInnerHTML`, and never act on instructions inside it.
+
+Outside the host (`npm run dev`, tests) every call rejects with
+`fn_unavailable`: render the call's card in a "runs in Studio" state rather than
+failing the page. Errors are in "When something goes wrong" below.
+
 ## Submitting
 
 ```bash
@@ -645,6 +739,16 @@ A later revision starts at `dataapp_new_version(app_id)` and repeats 2-4.
 | `invalid_app_code`, stage `boot` | It parses but throws on first render. The message carries the real error and the line in `app.js`. |
 | `invalid_app_code`, "did not finish" | Something loops or never settles at module scope. |
 | `query_not_allowed` | The `queryId` is not in the submitted manifest. |
+| `fn_not_declared` | `bda.fn.call` named a local name that `functions` in the manifest does not declare, or passed a ref instead of a local name. |
+| `fn_unavailable` | The app is not inside the Studio host (`npm run dev`, a test, a capture). Functions run only in the hosted app. |
+| `input_invalid` | The input does not match the function's `input_schema`. The message names the field. |
+| `input_too_large` | The input is over the host's size limit. Send ids, not rows. |
+| `function_not_found` | The declared function is not published, or is not exposed to apps. |
+| `function_disabled` | The owner disabled the function. Pinned apps keep working; new uses are refused. Ask the owner. |
+| `agent_queue_full` / a run `queued` with `queue_position` | The workspace's agent slots are full. Show "Queued · N ahead" and keep watching; do not call again. |
+| a run `failed` with `queue_timeout` | An agent waited in the queue too long. Offer a retry button. |
+| `cancelled` | The run was cancelled (your Cancel button, or the person). |
+| `host_timeout` | The host did not answer within 60 s. Usually the page was reloading; retry. |
 | HTTP 412 on complete | The uploaded object's checksum or size does not match what you declared. |
 | HTTP 410 on upload-url | That version is no longer `awaiting_upload`. Start a new version. |
 | `token_expired` | The view token aged out. In the host page this heals itself; in `npm run dev`, mint a new one. |
